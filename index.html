@@ -74,6 +74,10 @@
       background-color: #fff3cd !important;
     }
 
+    .baixo-estoque {
+      background-color: #fce4ec !important;
+    }
+
     img {
       width: 60px;
       height: auto;
@@ -92,21 +96,38 @@
     .btn-secundario:hover {
       background-color: #636e72;
     }
+
+    .color-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 5px;
+    }
+
+    .color-option {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+    }
+
+    .color-option.selected {
+      border-color: #2c3e50;
+    }
   </style>
 </head>
 <body>
 
   <h1>Sistema de Controle de Estoque</h1>
 
-  <!-- Menu Inicial -->
   <div id="menu">
     <button onclick="showSection('cadastro')">Cadastrar Produto</button>
     <button onclick="listarEstoque()">Consulta Estoque</button>
   </div>
 
-  <!-- Cadastro de Produto -->
   <div id="cadastro" class="hidden">
-    <h2>Cadastrar Produto</h2>
+    <h2 id="formTitulo">Cadastrar Produto</h2>
     <form id="produtoForm">
       <label>Produto:
         <input type="text" id="nome" required>
@@ -124,9 +145,9 @@
         </select>
       </label>
 
-      <label>Cor:
-        <input type="text" id="cor">
-      </label>
+      <label>Cor:</label>
+      <div id="seletorCores" class="color-picker"></div>
+      <input type="hidden" id="corSelecionada">
 
       <label>Validade:
         <input type="date" id="validade" required>
@@ -142,7 +163,6 @@
     </form>
   </div>
 
-  <!-- Consulta de Estoque -->
   <div id="estoque" class="hidden">
     <h2>Consulta de Estoque</h2>
     <button onclick="filtrarValidade()">Filtrar: Próximos ao Vencimento (30 dias)</button>
@@ -156,7 +176,7 @@
           <th>Cor</th>
           <th>Validade</th>
           <th>Foto</th>
-          <th>Alterar Qtd</th>
+          <th>Ações</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -166,12 +186,51 @@
 
   <script>
     let produtos = [];
+    let editandoIndex = null;
+
+    const coresDisponiveis = ["#FF0000", "#00FF00", "#0000FF", "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500", "#800080", "#008000", "#000000"];
+
+    function criarSeletorDeCores(corSelecionada = "") {
+      const container = document.getElementById("seletorCores");
+      container.innerHTML = "";
+      coresDisponiveis.forEach(cor => {
+        const div = document.createElement("div");
+        div.className = "color-option";
+        div.style.backgroundColor = cor;
+        if (cor === corSelecionada) {
+          div.classList.add("selected");
+        }
+        div.addEventListener("click", () => {
+          document.querySelectorAll(".color-option").forEach(el => el.classList.remove("selected"));
+          div.classList.add("selected");
+          document.getElementById("corSelecionada").value = cor;
+        });
+        container.appendChild(div);
+      });
+      document.getElementById("corSelecionada").value = corSelecionada;
+    }
 
     function showSection(id) {
       document.getElementById("menu").classList.add("hidden");
       document.getElementById("cadastro").classList.add("hidden");
       document.getElementById("estoque").classList.add("hidden");
       document.getElementById(id).classList.remove("hidden");
+
+      if (id === "cadastro") {
+        criarSeletorDeCores();
+        document.getElementById("formTitulo").textContent = editandoIndex === null ? "Cadastrar Produto" : "Editar Produto";
+      }
+    }
+
+    function salvarNoStorage() {
+      localStorage.setItem("produtos", JSON.stringify(produtos));
+    }
+
+    function carregarDoStorage() {
+      const dados = localStorage.getItem("produtos");
+      if (dados) {
+        produtos = JSON.parse(dados);
+      }
     }
 
     document.getElementById("produtoForm").addEventListener("submit", function(e) {
@@ -179,10 +238,16 @@
       const nome = document.getElementById("nome").value;
       const quantidade = parseInt(document.getElementById("quantidade").value);
       const unidade = document.getElementById("unidade").value;
-      const cor = document.getElementById("cor").value;
+      const cor = document.getElementById("corSelecionada").value;
       const validade = document.getElementById("validade").value;
       const fotoInput = document.getElementById("foto");
       const reader = new FileReader();
+
+      const hoje = new Date().toISOString().split("T")[0];
+      if (validade < hoje) {
+        alert("A data de validade não pode ser anterior a hoje.");
+        return;
+      }
 
       reader.onload = function () {
         const produto = {
@@ -193,8 +258,16 @@
           validade,
           foto: reader.result
         };
-        produtos.push(produto);
-        alert("Produto cadastrado com sucesso!");
+
+        if (editandoIndex !== null) {
+          produtos[editandoIndex] = produto;
+          editandoIndex = null;
+        } else {
+          produtos.push(produto);
+        }
+
+        salvarNoStorage();
+        alert("Produto salvo com sucesso!");
         document.getElementById("produtoForm").reset();
         showSection("menu");
       };
@@ -209,45 +282,58 @@
     function listarEstoque(filtrados = null) {
       const tbody = document.querySelector("#tabelaEstoque tbody");
       tbody.innerHTML = "";
-
       const lista = filtrados || produtos;
 
       lista.forEach((p, index) => {
         const tr = document.createElement("tr");
 
-        // Verifica se está vencendo
         const diasParaVencer = calcularDiasParaVencer(p.validade);
         if (diasParaVencer >= 0 && diasParaVencer <= 30) {
           tr.classList.add("vencendo");
+        }
+
+        if (p.quantidade <= 5) {
+          tr.classList.add("baixo-estoque");
         }
 
         tr.innerHTML = `
           <td>${p.nome}</td>
           <td>${p.quantidade}</td>
           <td>${p.unidade}</td>
-          <td>${p.cor}</td>
-          <td>${p.validade}</td>
+          <td><div style="width: 20px; height: 20px; background-color: ${p.cor}; border-radius: 50%; border: 1px solid #ccc;"></div></td>
+          <td>${formatarDataBR(p.validade)}</td>
           <td>${p.foto ? `<img src="${p.foto}">` : ""}</td>
           <td>
             <button onclick="alterarQuantidade(${index}, 1)">+1</button>
-            <button onclick="alterarQuantidade(${index}, -1)">-1</button>
+            <button onclick="alterarQuantidade(${index}, -1)">-1</button><br>
+            <button onclick="editarProduto(${index})">Editar</button>
           </td>
         `;
-
         tbody.appendChild(tr);
       });
 
       showSection("estoque");
     }
 
+    function editarProduto(index) {
+      const p = produtos[index];
+      editandoIndex = index;
+      document.getElementById("nome").value = p.nome;
+      document.getElementById("quantidade").value = p.quantidade;
+      document.getElementById("unidade").value = p.unidade;
+      document.getElementById("validade").value = p.validade;
+      criarSeletorDeCores(p.cor);
+      showSection("cadastro");
+    }
+
     function alterarQuantidade(index, valor) {
       produtos[index].quantidade += valor;
       if (produtos[index].quantidade < 0) produtos[index].quantidade = 0;
+      salvarNoStorage();
       listarEstoque();
     }
 
     function filtrarValidade() {
-      const hoje = new Date();
       const filtrados = produtos.filter(p => {
         const dias = calcularDiasParaVencer(p.validade);
         return dias >= 0 && dias <= 30;
@@ -261,7 +347,13 @@
       const diffMs = validade - hoje;
       return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
     }
-  </script>
 
+    function formatarDataBR(dataISO) {
+      const [ano, mes, dia] = dataISO.split("-");
+      return `${dia}/${mes}/${ano}`;
+    }
+
+    carregarDoStorage();
+  </script>
 </body>
 </html>
