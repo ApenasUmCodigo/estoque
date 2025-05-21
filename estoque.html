@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Controle de Estoque</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f4f6f8;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1, h2 {
+      color: #2c3e50;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    button {
+      background-color: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      margin: 5px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #2980b9;
+    }
+
+    form input, form select {
+      padding: 8px;
+      margin: 5px 0;
+      width: 100%;
+      max-width: 400px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    form label {
+      display: block;
+      margin-top: 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: white;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #f2f2f2;
+    }
+
+    tr:hover {
+      background-color: #f9f9f9;
+    }
+
+    .vencendo {
+      background-color: #fff3cd !important;
+    }
+
+    img {
+      width: 60px;
+      height: auto;
+      border-radius: 4px;
+    }
+
+    #menu, #cadastro, #estoque {
+      max-width: 900px;
+      margin: auto;
+    }
+
+    .btn-secundario {
+      background-color: #7f8c8d;
+    }
+
+    .btn-secundario:hover {
+      background-color: #636e72;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Sistema de Controle de Estoque</h1>
+
+  <!-- Menu Inicial -->
+  <div id="menu">
+    <button onclick="showSection('cadastro')">Cadastrar Produto</button>
+    <button onclick="listarEstoque()">Consulta Estoque</button>
+  </div>
+
+  <!-- Cadastro de Produto -->
+  <div id="cadastro" class="hidden">
+    <h2>Cadastrar Produto</h2>
+    <form id="produtoForm">
+      <label>Produto:
+        <input type="text" id="nome" required>
+      </label>
+
+      <label>Quantidade:
+        <input type="number" id="quantidade" required>
+      </label>
+
+      <label>Unidade:
+        <select id="unidade">
+          <option value="KG">KG</option>
+          <option value="Pacote">Pacote</option>
+          <option value="Unidade">Unidade</option>
+        </select>
+      </label>
+
+      <label>Cor:
+        <input type="text" id="cor">
+      </label>
+
+      <label>Validade:
+        <input type="date" id="validade" required>
+      </label>
+
+      <label>Foto:
+        <input type="file" id="foto" accept="image/*">
+      </label>
+
+      <br>
+      <button type="submit">Salvar Produto</button>
+      <button type="button" class="btn-secundario" onclick="showSection('menu')">Voltar</button>
+    </form>
+  </div>
+
+  <!-- Consulta de Estoque -->
+  <div id="estoque" class="hidden">
+    <h2>Consulta de Estoque</h2>
+    <button onclick="filtrarValidade()">Filtrar: Próximos ao Vencimento (30 dias)</button>
+    <button onclick="listarEstoque()" class="btn-secundario">Listar Todos</button>
+    <table id="tabelaEstoque">
+      <thead>
+        <tr>
+          <th>Produto</th>
+          <th>Quantidade</th>
+          <th>Unidade</th>
+          <th>Cor</th>
+          <th>Validade</th>
+          <th>Foto</th>
+          <th>Alterar Qtd</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <button class="btn-secundario" onclick="showSection('menu')">Voltar</button>
+  </div>
+
+  <script>
+    let produtos = [];
+
+    function showSection(id) {
+      document.getElementById("menu").classList.add("hidden");
+      document.getElementById("cadastro").classList.add("hidden");
+      document.getElementById("estoque").classList.add("hidden");
+      document.getElementById(id).classList.remove("hidden");
+    }
+
+    document.getElementById("produtoForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const nome = document.getElementById("nome").value;
+      const quantidade = parseInt(document.getElementById("quantidade").value);
+      const unidade = document.getElementById("unidade").value;
+      const cor = document.getElementById("cor").value;
+      const validade = document.getElementById("validade").value;
+      const fotoInput = document.getElementById("foto");
+      const reader = new FileReader();
+
+      reader.onload = function () {
+        const produto = {
+          nome,
+          quantidade,
+          unidade,
+          cor,
+          validade,
+          foto: reader.result
+        };
+        produtos.push(produto);
+        alert("Produto cadastrado com sucesso!");
+        document.getElementById("produtoForm").reset();
+        showSection("menu");
+      };
+
+      if (fotoInput.files.length > 0) {
+        reader.readAsDataURL(fotoInput.files[0]);
+      } else {
+        reader.onload();
+      }
+    });
+
+    function listarEstoque(filtrados = null) {
+      const tbody = document.querySelector("#tabelaEstoque tbody");
+      tbody.innerHTML = "";
+
+      const lista = filtrados || produtos;
+
+      lista.forEach((p, index) => {
+        const tr = document.createElement("tr");
+
+        // Verifica se está vencendo
+        const diasParaVencer = calcularDiasParaVencer(p.validade);
+        if (diasParaVencer >= 0 && diasParaVencer <= 30) {
+          tr.classList.add("vencendo");
+        }
+
+        tr.innerHTML = `
+          <td>${p.nome}</td>
+          <td>${p.quantidade}</td>
+          <td>${p.unidade}</td>
+          <td>${p.cor}</td>
+          <td>${p.validade}</td>
+          <td>${p.foto ? `<img src="${p.foto}">` : ""}</td>
+          <td>
+            <button onclick="alterarQuantidade(${index}, 1)">+1</button>
+            <button onclick="alterarQuantidade(${index}, -1)">-1</button>
+          </td>
+        `;
+
+        tbody.appendChild(tr);
+      });
+
+      showSection("estoque");
+    }
+
+    function alterarQuantidade(index, valor) {
+      produtos[index].quantidade += valor;
+      if (produtos[index].quantidade < 0) produtos[index].quantidade = 0;
+      listarEstoque();
+    }
+
+    function filtrarValidade() {
+      const hoje = new Date();
+      const filtrados = produtos.filter(p => {
+        const dias = calcularDiasParaVencer(p.validade);
+        return dias >= 0 && dias <= 30;
+      });
+      listarEstoque(filtrados);
+    }
+
+    function calcularDiasParaVencer(dataValidade) {
+      const hoje = new Date();
+      const validade = new Date(dataValidade);
+      const diffMs = validade - hoje;
+      return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    }
+  </script>
+
+</body>
+</html>
